@@ -1,21 +1,14 @@
-import time
 import argparse
 import json
 from pathlib import Path
 import pandas as pd
-from sklearn.model_selection import train_test_split, GridSearchCV
-from sklearn.pipeline import Pipeline
-from sklearn.preprocessing import MinMaxScaler, StandardScaler, LabelEncoder
-from sklearn.calibration import CalibratedClassifierCV
-from sklearn.neural_network import MLPClassifier
-import mlflow
 from sklearn.metrics import f1_score
-from joblib import dump
-
+from joblib import load
+from sklearn.preprocessing import LabelEncoder
+import os
 
 # mlflow.autolog()
 def main():
-    start = time.time()
     parser = argparse.ArgumentParser()
     parser.add_argument('dataset_path', type=str)
     parser.add_argument('results_file', type=str)
@@ -36,52 +29,23 @@ def main():
     # print(data['Hand'])
     Y = data['letter']
     X = data.drop('letter', axis=1)
-    X = X.drop('number', axis=1)
-    # print(f' Y {Y}')
-    X_train, X_test, y_train, y_test = train_test_split(X, Y, test_size=0.30, random_state=42, stratify=Y)
+    X = X.iloc[:, 1:]
 
-    results = dict()
-    classif = MLPClassifier(activation='logistic',hidden_layer_sizes=200, max_iter=30000)
-    class_sigmoid = CalibratedClassifierCV(classif,  method="sigmoid")
+    directory = os.path.join(os.getcwd(), 'training/model')
+    results = list()
+    model_path = os.path.join(directory, "klasyfikator.pkl")
+    model = load(model_path)
+    results.append(model.predict(X))
 
-    clfs = [
-        # SVC,
-        # DecisionTreeClassifier,
-        # RandomForestClassifier,
-        # GradientBoostingClassifier,
-        MLPClassifier
-    ]
+    results_list = [result.tolist() for result in results]
 
-    # params = {'activation': ['logistic', 'relu'],  'hidden_layer_sizes': [100, 200, 300, 500],
-    #           'max_iter': [2000, 5000, 10000, 25000, 50000],'n_iter_no_change': [5, 10, 15, 20]
-    # }
-    # klas = GridSearchCV(MLPClassifier(), params, cv=10)
-    # klas.fit(X_train, y_train)
-    # sorted_results = sorted(zip(klas.cv_results_['mean_test_score'], klas.cv_results_['params']), reverse=True)
-    # for mean_score, params in sorted_results:
-    #     print(f"Mean score: {mean_score:.4f}")
-    #     print(f"Params: {params}")
-    #     print("----------------------------------------")
-    #
-    for clf in clfs:
-        mdl = Pipeline([
-            ('min_max_scaler', MinMaxScaler()),
-            ('standard_scaler', StandardScaler()),
-            ('classifier', class_sigmoid)
-        ])
-        mdl.fit(X_train, y_train)
-        results[clf.__name__] = mdl.score(X_test, y_test)
-        y_pred = mdl.predict(X_test)
-
-    print(results)
+    y_pred = model.predict(X)
+    f1 = f1_score(Y, y_pred, average='macro')
+    results_list.append({'F1 score': f1})
 
     with results_file.open('w') as output_file:
-        json.dump(results, output_file, indent=4)
-
-    dump(mdl, 'klasyfikator.pkl')
+        json.dump(results_list, output_file, indent=4)
 
 
-    stop = time.time()
-    print(f'Elapsed time: {stop-start} seconds')
 if __name__ == '__main__':
     main()
